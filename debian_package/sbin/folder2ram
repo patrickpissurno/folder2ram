@@ -48,7 +48,7 @@
 
 #If you edit it, please comment HEAVILY what you are doing, you will thank me later.
 
-VERSION="0.3.7"
+VERSION="0.3.7-patrickpissurno"
 
 ############### USER INTERFACE FUNCTIONS ########################
 
@@ -349,6 +349,28 @@ fi
 
 } #### END read_mount_point
 
+read_no_persistance () {
+# this reads config file at a predetemined line and extracts the no_persistance flag
+# $line_number must come from outside
+# blank lines and commented lines are ignored, so line_number refers only to actual mount points
+
+line_number=$1
+
+# remove blank and commented lines with sed, get variable from outside in awk, and use it to print line at $line_number
+# then removing trailing //// with sed
+type=$( sed '/^[[:space:]]*$/d' /etc/folder2ram_cleaner.conf | sed '/^#/d' | awk -v line="$line_number" 'NR == line {print $1}' | sed 's:/*$::' )
+
+# check if no_persistance is present
+case $type in
+	*_np)
+		echo 1
+		;;
+	*)
+		echo 0
+		;;
+esac
+
+} #### END no_persistance
 
 ############# MAIN PART ##################
 
@@ -389,16 +411,27 @@ DIRPERM="/var/folder2ram$DIR"
 
 	case $output_flag in
 
-		0) # Merge back to permanent storage with
-		      #rsync preserve-ACLs preserve-owner preserve-group preserve-extended-attributes quiet recursive links time archive --delete SOURCE ---> DESTINATION
-			if rsync -o -g -A -X -q -r -l -t -a --delete "$DIR"'/' "$DIRPERM"; then
-				# Success!
-				rm "$LOCKFILE"
-				umount -l "$DIR"
-				umount -l "$DIRPERM"
-			else
-				echo "could not merge back to permanent storage"
-			fi
+		0)
+			case $no_persistance in
+				0)
+					# Merge back to permanent storage with
+					#rsync preserve-ACLs preserve-owner preserve-group preserve-extended-attributes quiet recursive links time archive --delete SOURCE ---> DESTINATION
+					if rsync -o -g -A -X -q -r -l -t -a --delete "$DIR"'/' "$DIRPERM"; then
+						# Success!
+						rm "$LOCKFILE"
+						umount -l "$DIR"
+						umount -l "$DIRPERM"
+					else
+						echo "could not merge back to permanent storage"
+					fi
+				;;
+
+				1)
+					rm "$LOCKFILE"
+					umount -l "$DIR"
+					umount -l "$DIRPERM"
+				;;
+			esac
 		;;
 
 		1) # already unmounted
@@ -414,6 +447,9 @@ line_number=$((line_number+1))
 # reading next mountpoint before next iteration in loop
 # calling another function (above) to fill the mount point at this line number
 mount_point=$(read_mount_point "$line_number")
+
+# calling another function (above) to fill the no_persistance flag at this line number
+no_persistance=$(read_no_persistance "$line_number")
 
 done ####:::::#### END OF mount_umount_all UNTIL LOOP ####:::::####
 
@@ -459,7 +495,7 @@ cat << EOF > "/etc/folder2ram/folder2ram.conf"
 #        it is preferable to set the variables RAMTMP, RAMLOCK
 #        in /etc/default/tmpfs.
 #
-#TYPE: options available are "tmpfs" (for a ram folder)
+#TYPE: options available are "tmpfs" (for a ram folder) and "tmpfs_np" (for a ram folder that won't be persisted back to disk)
 #
 #OPTIONS: mount option (will be passed as options to mount), if left blank "defaults" will be used
 #
@@ -512,6 +548,11 @@ line_number=$1
 # then removing trailing //// with sed
 type=$( sed '/^[[:space:]]*$/d' /etc/folder2ram/folder2ram.conf | sed '/^#/d' | awk -v line="$line_number" 'NR == line {print $1}' | sed 's:/*$::' )
 
+# removing _np if present
+case $type in *_np)
+    type=${type%???}
+esac
+
 # checking if filesystem variable is empty, and if it is returning a keyword
 if [ "x$type" != "x" ]; then
 echo "$type";
@@ -520,6 +561,29 @@ echo "no_type";
 fi
 
 } #### END read_filesystem
+
+read_no_persistance () {
+# this reads config file at a predetemined line and extracts the no_persistance flag
+# $line_number must come from outside
+# blank lines and commented lines are ignored, so line_number refers only to actual mount points
+
+line_number=$1
+
+# remove blank and commented lines with sed, get variable from outside in awk, and use it to print line at $line_number
+# then removing trailing //// with sed
+type=$( sed '/^[[:space:]]*$/d' /etc/folder2ram/folder2ram.conf | sed '/^#/d' | awk -v line="$line_number" 'NR == line {print $1}' | sed 's:/*$::' )
+
+# check if no_persistance is present
+case $type in
+	*_np)
+		echo 1
+		;;
+	*)
+		echo 0
+		;;
+esac
+
+} #### END no_persistance
 
 read_mount_point () {
 # this reads config file at a predetemined line and extracts mount point
@@ -628,6 +692,9 @@ echo "will now $start_or_stop all mountpoints"
 
 # calling another function (above) to fill the type at this line number
 TYPE=$(read_type "$line_number")
+
+# calling another function (above) to fill the no_persistance flag at this line number
+no_persistance=$(read_no_persistance "$line_number")
 
 # calling another function (above) to fill the mount point at this line number
 mount_point="$(read_mount_point "$line_number")"
@@ -766,17 +833,27 @@ case "$start_or_stop" in
 			case $TYPE in
 
 					tmpfs)
-							# Merge back to permanent storage with
-							#rsync preserve-ACLs preserve-owner preserve-group preserve-extended-attributes quiet recursive links time archive --delete
-							#SOURCE ---> DESTINATION
-							if rsync -o -g -A -X -r -l -t -a --delete "$DIR"'/' "$DIRPERM"; then
-								# Success!
+						case $no_persistance in
+							0)
+								# Merge back to permanent storage with
+								#rsync preserve-ACLs preserve-owner preserve-group preserve-extended-attributes quiet recursive links time archive --delete
+								#SOURCE ---> DESTINATION
+								if rsync -o -g -A -X -r -l -t -a --delete "$DIR"'/' "$DIRPERM"; then
+									# Success!
+									rm "$LOCKFILE"
+									umount -l "$DIR"
+									umount -l "$DIRPERM"
+								else
+									echo "could not merge back to permanent storage"
+								fi
+							;;
+
+							1)
 								rm "$LOCKFILE"
 								umount -l "$DIR"
 								umount -l "$DIRPERM"
-							else
-								echo "could not merge back to permanent storage"
-							fi
+							;;
+						esac
 					;;
 
 			esac
@@ -799,6 +876,9 @@ line_number=$((line_number+1))
 
 # calling another function (above) to fill the type at this line number
 TYPE=$(read_type "$line_number")
+
+# calling another function (above) to fill the no_persistance flag at this line number
+no_persistance=$(read_no_persistance "$line_number")
 
 # calling another function (above) to fill the mount point at this line number
 mount_point=$(read_mount_point "$line_number")
@@ -870,6 +950,9 @@ fi
 # calling another function (above) to fill the type at this line number
 TYPE=$(read_type "$line_number")
 
+# calling another function (above) to fill the no_persistance flag at this line number
+no_persistance=$(read_no_persistance "$line_number")
+
 # calling another function (above) to fill the mount point at this line number
 mount_point=$(read_mount_point "$line_number")
 
@@ -917,13 +1000,22 @@ until [ "$mount_point" = "no_more_mount_points" ] ;  do
 
             case $output_flag in
 
-                0) # Merge back to permanent storage with
-                #rsync preserve-ACLs preserve-owner preserve-group preserve-extended-attributes quiet recursive links time archive --delete SOURCE ---> DESTINATION
-                    if rsync -o -g -A -X -q -r -l -t -a --delete "$source"'/' "$destination"; then
-                        echo "sync of $source successful!"
-                    else
-                        echo "could not sync $source"
-                    fi
+                0)
+					case $no_persistance in
+						0)
+							# Merge back to permanent storage with
+							#rsync preserve-ACLs preserve-owner preserve-group preserve-extended-attributes quiet recursive links time archive --delete SOURCE ---> DESTINATION
+							if rsync -o -g -A -X -q -r -l -t -a --delete "$source"'/' "$destination"; then
+								echo "sync of $source successful!"
+							else
+								echo "could not sync $source"
+							fi
+						;;
+
+						1)
+							echo "not syncing $source because no_persistance=1"
+						;;
+					esac 
                 ;;
 
                 1) # already unmounted
@@ -941,6 +1033,9 @@ until [ "$mount_point" = "no_more_mount_points" ] ;  do
 
     # calling another function (above) to fill the type at this line number
     TYPE=$(read_type "$line_number")
+
+	# calling another function (above) to fill the no_persistance flag at this line number
+	no_persistance=$(read_no_persistance "$line_number")
 
     # calling another function (above) to fill the mount point at this line number
     mount_point=$(read_mount_point "$line_number")
