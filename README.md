@@ -12,6 +12,8 @@ There is a gentoo ebuild in https://github.com/comio/comio-overlay (not mantaine
 
 READYNESS: stable
 
+**Note: this fork adds a few extra things I needed. For the original version, [see here](https://github.com/bobafetthotmail/folder2ram/)**
+
 ### FEATURES:
 
 -can move a folder (and its contents) to a tmpfs mount in ram, then move it back to permanent storage at shutdown
@@ -23,6 +25,8 @@ READYNESS: stable
 -supports natively SysV init
 
 -supports natively Systemd init
+
+-supports an optional non-persistance mode where contents are not moved back to permanent storage (this fork only)
 
 
 ### DONE (newest first):
@@ -81,7 +85,7 @@ Run the following commands as root or with sudo:
 
 Download the script from this github repo directly and place it in /sbin with this command
 
-**wget -O /sbin/folder2ram https://raw.githubusercontent.com/bobafetthotmail/folder2ram/master/debian_package/sbin/folder2ram**
+**wget -O /sbin/folder2ram https://raw.githubusercontent.com/patrickpissurno/folder2ram/master/debian_package/sbin/folder2ram**
 
 Then make it executable
 **chmod +x /sbin/folder2ram**
@@ -92,7 +96,7 @@ Then execute it (still as root) to see the help.
 and you will see the following help text
 ```
 
-Welcome to folder2ram version 0.3.0  !
+Welcome to folder2ram version 0.3.7-patrickpissurno !
 folder2ram is a script-based utility that relocates the contents of a folder to RAM
 and on shutdown unmounts it safely synching the data back to the permanent storage.
 
@@ -195,10 +199,18 @@ https://github.com/OpenMediaVault-Plugin-Developers/openmediavault-flashmemory/b
 #        it is preferable to set the variables RAMTMP, RAMLOCK
 #        in /etc/default/tmpfs.
 #
-#FILE SYSTEM: does nothing, will be implemented in the future. (everything goes to tmpfs for now)
-#OPTIONS: does nothing, will be implemented in the future.
+#TYPE: options available are "tmpfs" (for a ram folder) and "tmpfs_np" (for a ram folder that won't be persisted back to disk)
 #
-#<file system>  <mount point>                 <options>
+#OPTIONS: mount option (will be passed as options to mount), if left blank "defaults" will be used
+#
+#TIMEOUT=2m #write here the timeout limit for folder2ram service activity
+#           #(the time specified here must cover the mount/unmount time of all folders)
+#           #if you are using systemd init, when you change this value you must run
+#           #folder2ram -enablesystemd again to update the systemd service units with the new value 
+#
+#IMPORTANT: use 2 Tabs to separate "type" from "mount point" from "options", the script needs them to read correctly the configuration.
+#
+#<type>		<mount point>			<options>
 #tmpfs		/var/cache                 #this folder will be activated later after testing is completed
 tmpfs		/var/log
 tmpfs		/var/tmp
